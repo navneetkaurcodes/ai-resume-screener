@@ -5,8 +5,7 @@ from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker, declarative_base
 
 # import settings so we can read DATABASE_URL from .env
-from app.config import settings
-
+from app.core.config import settings
 
 # connect python to postgresql
 # every time a route needs to read or write data, it gets a "session" from here

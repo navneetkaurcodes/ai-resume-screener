@@ -8,7 +8,7 @@ from sqlalchemy import (
 )
 from sqlalchemy.orm import relationship
 from datetime import datetime
-from app.database import Base
+from app.core.database import Base
 
 # ─────────────────────────────────────────
 # TABLE 1: users
@@ -26,8 +26,8 @@ class User(Base):
 
     # "A user can have many resumes" and "a user can have many job descriptions"
     # back_populates= establish a bidirectional relationship between two models
-    resumes          = relationship('Resume', back_populates='uploader')
-    job_descriptions = relationship('JobDescription', back_populates='creator')
+    resumes = relationship("Resume",back_populates="uploader",cascade="all, delete-orphan")
+    job_descriptions = relationship("JobDescription",back_populates="creator",cascade="all, delete-orphan")
 
 
 # ─────────────────────────────────────────
@@ -39,9 +39,9 @@ class JobDescription(Base):
     __tablename__ = 'job_descriptions'
 
     id              = Column(Integer, primary_key=True, index=True)
-    user_id         = Column(Integer, ForeignKey('users.id'))  # which HR created this JD
-    title           = Column(String(255), nullable=False)       # "Senior Python Developer"
-    company         = Column(String(255))                       # "Infosys"
+    user_id = Column(Integer,ForeignKey("users.id", ondelete="CASCADE"),nullable=False)  # which HR created this JD
+    title           = Column(String(255), nullable=False ,index=True)       # "Senior Python Developer"
+    company         = Column(String(255),index=True)                       # "Infosys"
     description     = Column(Text, nullable=False)              # full job description text
     required_skills = Column(ARRAY(String))   # ['python', 'docker', 'fastapi']
     preferred_skills= Column(ARRAY(String))   # ['kubernetes', 'redis']
@@ -50,6 +50,9 @@ class JobDescription(Base):
 
     # Link back: "this JD was created by one user"
     creator = relationship('User', back_populates='job_descriptions')
+    scores = relationship("CandidateScore",back_populates="job_description",cascade="all, delete-orphan")
+
+    skill_gaps = relationship("SkillGap",back_populates="job_description",cascade="all, delete-orphan")
 
 
 # ─────────────────────────────────────────
@@ -61,8 +64,8 @@ class Resume(Base):
     __tablename__ = 'resumes'
 
     id              = Column(Integer, primary_key=True, index=True)
-    candidate_name  = Column(String(255))    # extracted from PDF by spaCy
-    email           = Column(String(255))    # extracted from PDF by regex
+    candidate_name  = Column(String(255),index=True)    # extracted from resume text
+    email           = Column(String(255),index=True)    # extracted from PDF by regex
     phone           = Column(String(50))     # extracted from PDF by regex
     pdf_filename    = Column(String(500), nullable=False)  # saved filename
     pdf_path        = Column(String(1000))   # full path: ./uploads/uuid_filename.pdf
@@ -71,11 +74,15 @@ class Resume(Base):
     education       = Column(JSON)           # {"degree": "B.Tech", "college": "..."}
     experience_years= Column(Float)          # 3.5
     job_titles      = Column(ARRAY(String))  # ['Software Engineer', 'Backend Dev']
-    uploaded_by     = Column(Integer, ForeignKey('users.id'))
+    uploaded_by     = Column(Integer, ForeignKey('users.id', ondelete="CASCADE"),nullable=False)
     uploaded_at     = Column(TIMESTAMP, default=datetime.utcnow)
 
     # Link back: "this resume was uploaded by one user"
     uploader = relationship('User', back_populates='resumes')
+
+    scores = relationship("CandidateScore",back_populates="resume",cascade="all, delete-orphan")
+
+    skill_gaps = relationship("SkillGap",back_populates="resume",cascade="all, delete-orphan")
 
 
 # ─────────────────────────────────────────
@@ -88,16 +95,19 @@ class CandidateScore(Base):
 
     # UniqueConstraint means: one resume can only be scored once per JD
     # If you try to score the same pair again, it updates instead of duplicating
-    __table_args__ = (UniqueConstraint('resume_id', 'jd_id'),)
+    __table_args__ = (UniqueConstraint('resume_id', 'jd_id',name="uq_candidate_scores_resume_jd"),)
 
     id                = Column(Integer, primary_key=True)
-    resume_id         = Column(Integer, ForeignKey('resumes.id'))
-    jd_id             = Column(Integer, ForeignKey('job_descriptions.id'))
+    resume_id         = Column(Integer, ForeignKey('resumes.id', ondelete="CASCADE"),nullable=False)
+    jd_id             = Column(Integer, ForeignKey('job_descriptions.id', ondelete="CASCADE"),nullable=False)
     tfidf_score       = Column(Float)   # 0-100: how well resume TEXT matches JD text
     skill_match_percent= Column(Float)  # 0-100: % of required skills found in resume
     final_score       = Column(Float)   # (0.7 × tfidf) + (0.3 × skill_match)
     rank              = Column(Integer) # 1st, 2nd, 3rd... among all candidates for this JD
     scored_at         = Column(TIMESTAMP, default=datetime.utcnow)
+
+    resume = relationship("Resume", back_populates="scores")
+    job_description = relationship("JobDescription", back_populates="scores")
 
 
 # ─────────────────────────────────────────
@@ -108,30 +118,14 @@ class CandidateScore(Base):
 class SkillGap(Base):
     __tablename__ = 'skill_gaps'
 
-    __table_args__ = (UniqueConstraint('resume_id', 'jd_id'),)
+    __table_args__ = (UniqueConstraint('resume_id', 'jd_id', name="uq_skill_gaps_resume_jd"),)
 
     id             = Column(Integer, primary_key=True)
-    resume_id      = Column(Integer, ForeignKey('resumes.id'))
-    jd_id          = Column(Integer, ForeignKey('job_descriptions.id'))
+    resume_id      = Column(Integer, ForeignKey('resumes.id', ondelete="CASCADE"),nullable=False)
+    jd_id          = Column(Integer, ForeignKey('job_descriptions.id', ondelete="CASCADE"),nullable=False)
     matched_skills = Column(ARRAY(String))  # ['python', 'docker']
     missing_skills = Column(ARRAY(String))  # ['kubernetes', 'redis']
     match_percent  = Column(Float)          # 50.0 (2 out of 4 skills matched)
 
-
-# ─────────────────────────────────────────
-# TABLE 6: summary_reports
-# Stores the AI-generated text summary for each candidate
-# e.g. "Candidate has 4 years experience. Matches 78% of requirements. Missing: Kubernetes."
-# ─────────────────────────────────────────
-class SummaryReport(Base):
-    __tablename__ = 'summary_reports'
-
-    __table_args__ = (UniqueConstraint('resume_id', 'jd_id'),)
-
-    id           = Column(Integer, primary_key=True)
-    resume_id    = Column(Integer, ForeignKey('resumes.id'))
-    jd_id        = Column(Integer, ForeignKey('job_descriptions.id'))
-    summary      = Column(Text)    # "Candidate has 4 yrs experience, strong Python..."
-    strengths    = Column(Text)    # "Matched: Python, Docker, FastAPI"
-    weaknesses   = Column(Text)    # "Missing: Kubernetes, Redis, AWS"
-    generated_at = Column(TIMESTAMP, default=datetime.utcnow)
+    resume = relationship("Resume", back_populates="skill_gaps")
+    job_description = relationship("JobDescription", back_populates="skill_gaps")

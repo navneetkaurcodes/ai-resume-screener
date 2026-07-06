@@ -1,7 +1,32 @@
-.env
+# Python
 __pycache__/
-*.pyc
+*.py[cod]
+*.pyo
+*.pyd
+
+# Virtual Environment
 venv/
 .venv/
+env/
+
+# Environment Variables
+.env
+
+# Uploaded Files
 uploads/
+
+# VS Code
+.vscode/
+
+# Pytest
+.pytest_cache/
+
+# Logs
+*.log
+
+# OS Files
+.DS_Store
+Thumbs.db
+
+# SQLAlchemy
 *.db

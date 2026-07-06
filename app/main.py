@@ -1,14 +1,32 @@
-from fastapi import FastAPI
+from fastapi import FastAPI, Depends
+from sqlalchemy import text
+from sqlalchemy.orm import Session
 
-app = FastAPI(
-    title="AI Resume Screener",
-    version="1.0.0",
-    description="AI-powered Resume Screening API"
-)
+from app.core.database import get_db
+from app.routers.job_description import router as job_router
+from app.routers.user import router as user_router
+from app.routers.resume import router as resume_router
+from app.routers.scoring import router as scoring_router
+from app.routers.auth import router as auth_router
+from app.routers.dashboard import router as dashboard_router
 
+app = FastAPI()
+
+app.include_router(job_router)
+app.include_router(user_router)
+app.include_router(resume_router)
+app.include_router(scoring_router)
+app.include_router(auth_router)
+app.include_router(dashboard_router)
 
 @app.get("/")
 def home():
+    return {"message": "AI Resume Screener API"}
+
+
+@app.get("/test-db")
+def test_db(db: Session = Depends(get_db)):
+    db.execute(text("SELECT 1"))
     return {
-        "message": "Welcome to AI Resume Screener API"
+        "message": "Database Connected Successfully"
     }
