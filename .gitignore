@@ -3,6 +3,7 @@ __pycache__/
 *.py[cod]
 *.pyo
 *.pyd
+*.pyc
 
 # Virtual Environment
 venv/
@@ -17,6 +18,7 @@ uploads/
 
 # VS Code
 .vscode/
+.idea/
 
 # Pytest
 .pytest_cache/
